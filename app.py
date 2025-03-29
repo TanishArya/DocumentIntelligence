@@ -75,7 +75,7 @@ if 'document_insights' not in st.session_state:
 # App header with logo and title
 col1, col2 = st.columns([1, 5])
 with col1:
-    st.image("https://cdn.pixabay.com/photo/2016/01/27/15/25/search-engine-1164896_1280.png", width=80)
+    st.image("generated-icon.png", width=125)
 with col2:
     st.title("AI-Powered Document Query System")
     st.markdown("""
