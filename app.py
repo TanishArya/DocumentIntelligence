@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from document_processor import process_document
 from search_engine import create_index, search_documents
 from utils import get_file_extension, display_results
+from ai_text_generator import SimpleTextGenerator
 
 # Set page configuration
 st.set_page_config(
@@ -54,6 +55,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Initialize text generator
+text_generator = SimpleTextGenerator()
+
 # Initialize session state
 if 'documents' not in st.session_state:
     st.session_state.documents = {}  # {doc_id: {content, filename, metadata}}
@@ -63,16 +67,20 @@ if 'search_results' not in st.session_state:
     st.session_state.search_results = []
 if 'view_document' not in st.session_state:
     st.session_state.view_document = None
+if 'document_analyses' not in st.session_state:
+    st.session_state.document_analyses = {}  # {doc_id: analysis_results}
+if 'document_insights' not in st.session_state:
+    st.session_state.document_insights = None
 
 # App header with logo and title
 col1, col2 = st.columns([1, 5])
 with col1:
     st.image("https://cdn.pixabay.com/photo/2016/01/27/15/25/search-engine-1164896_1280.png", width=80)
 with col2:
-    st.title("Smart Document Query System")
+    st.title("AI-Powered Document Query System")
     st.markdown("""
     <p style="font-size: 1.2em; margin-top: -10px;">
-        Upload your documents and search through them with intelligent natural language processing.
+        Upload, analyze, and search your documents with AI-powered summarization and Q&A capabilities.
         <span style="background-color: #f0f2f6; border-radius: 4px; padding: 2px 6px; margin-left: 5px; font-size: 0.9em;">
             Supports PDF, DOCX, TXT
         </span>
@@ -113,6 +121,11 @@ with st.sidebar:
                             "filename": uploaded_file.name,
                             "metadata": metadata
                         }
+                        
+                        # Generate AI analysis for the document
+                        with st.spinner(f"Analyzing {uploaded_file.name} with AI..."):
+                            analysis = text_generator.analyze_document(content, metadata)
+                            st.session_state.document_analyses[doc_id] = analysis
                     else:
                         st.sidebar.error(f"Could not extract text from {uploaded_file.name}")
                         
@@ -130,6 +143,14 @@ with st.sidebar:
             if st.session_state.documents:
                 status_text.text("Building search index...")
                 st.session_state.index = create_index(st.session_state.documents)
+                
+                # Generate cross-document insights if multiple documents
+                if len(st.session_state.documents) > 1:
+                    status_text.text("Generating AI insights across documents...")
+                    st.session_state.document_insights = text_generator.generate_insights(
+                        st.session_state.documents
+                    )
+                
                 status_text.text("Ready to search!")
             
             # Hide progress after completion
@@ -257,6 +278,53 @@ if st.session_state.documents:
                     
                     plt.tight_layout()
                     st.pyplot(fig)
+            
+            # Display cross-document AI insights
+            if st.session_state.document_insights:
+                st.markdown("### AI-Powered Cross-Document Insights")
+                insights = st.session_state.document_insights
+                
+                with st.container():
+                    st.markdown("""
+                    <div style="background-color:white; border:1px solid #eee; border-radius:8px; padding:20px; 
+                    margin-bottom:20px; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Common themes
+                    if 'common_themes' in insights and insights['common_themes']:
+                        st.markdown("#### Common Themes Across Documents")
+                        theme_html = ""
+                        for theme in insights['common_themes']:
+                            theme_html += f'<span style="background-color:#FF4B4B; color:white; padding:5px 10px; border-radius:15px; margin-right:8px; display:inline-block; margin-bottom:8px; font-weight:500;">{theme}</span>'
+                        
+                        st.markdown(f"""
+                        <div style="margin-bottom:20px;">
+                            {theme_html}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Recommendations
+                    if 'recommendations' in insights and insights['recommendations']:
+                        st.markdown("#### AI Recommendations")
+                        for i, rec in enumerate(insights['recommendations']):
+                            st.markdown(f"""
+                            <div style="background-color:#f8f9fa; border-radius:5px; padding:10px; 
+                            border-left:4px solid #09AB3B; margin-bottom:10px;">
+                                {i+1}. {rec}
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    # Connections between documents
+                    if 'connections' in insights and insights['connections']:
+                        st.markdown("#### Document Connections")
+                        for conn in insights['connections']:
+                            st.markdown(f"""
+                            <div style="background-color:#f8f9fa; border-radius:5px; padding:10px; 
+                            border-left:4px solid #0068C9; margin-bottom:10px;">
+                                {conn}
+                            </div>
+                            """, unsafe_allow_html=True)
         
         # Display document cards
         st.markdown("### Document Details")
@@ -295,8 +363,8 @@ if st.session_state.documents:
                     </div>
                     """, unsafe_allow_html=True)
                 
-                # Create tabs for preview and metadata
-                preview_tab, metadata_tab = st.tabs(["Preview", "Metadata"])
+                # Create tabs for preview, metadata, and AI analysis
+                preview_tab, metadata_tab, ai_tab, qa_tab = st.tabs(["Preview", "Metadata", "AI Analysis", "Ask Questions"])
                 
                 with preview_tab:
                     # Display a more readable preview
@@ -329,6 +397,76 @@ if st.session_state.documents:
                                 """, unsafe_allow_html=True)
                     else:
                         st.info("No metadata available for this document")
+                
+                with ai_tab:
+                    if doc_id in st.session_state.document_analyses:
+                        analysis = st.session_state.document_analyses[doc_id]
+                        
+                        # Display document type prediction
+                        st.markdown("#### Document Type")
+                        st.markdown(f"""
+                        <div style="background-color:#f8f9fa; border-radius:5px; padding:10px; margin-bottom:15px;">
+                            {analysis.get('document_type', 'Unknown document type')}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Display document summary
+                        st.markdown("#### AI-Generated Summary")
+                        st.markdown(f"""
+                        <div style="background-color:#f8f9fa; border-radius:5px; padding:10px; margin-bottom:15px;">
+                            {analysis.get('summary', 'Summary not available')}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Display key topics
+                        if 'key_topics' in analysis and analysis['key_topics']:
+                            st.markdown("#### Key Topics")
+                            topics_html = ""
+                            for topic in analysis['key_topics']:
+                                topics_html += f'<span style="background-color:#0068C9; color:white; padding:3px 8px; border-radius:10px; margin-right:5px; display:inline-block; margin-bottom:5px;">{topic}</span>'
+                            
+                            st.markdown(f"""
+                            <div style="margin-bottom:15px;">
+                                {topics_html}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        # Display reading time
+                        if 'reading_time' in analysis:
+                            st.markdown("#### Estimated Reading Time")
+                            st.markdown(f"""
+                            <div style="background-color:#f8f9fa; border-radius:5px; padding:10px; margin-bottom:15px;">
+                                <span style="font-size:1.2em; font-weight:bold;">⏱️ {analysis['reading_time']}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        with st.spinner("Analyzing document..."):
+                            # Generate analysis if not already available
+                            analysis = text_generator.analyze_document(doc['content'], doc.get('metadata', {}))
+                            st.session_state.document_analyses[doc_id] = analysis
+                            st.rerun()  # Refresh to show the new analysis
+                
+                with qa_tab:
+                    st.markdown("#### Ask a Question About This Document")
+                    
+                    # Create a unique key for this document's question input
+                    question_key = f"question_{doc_id}"
+                    user_question = st.text_input("Enter your question", key=question_key)
+                    
+                    if st.button("Get Answer", key=f"answer_btn_{doc_id}"):
+                        if user_question:
+                            with st.spinner("Generating answer..."):
+                                answer = text_generator.answer_question(user_question, doc['content'])
+                                
+                                st.markdown("#### Answer")
+                                st.markdown(f"""
+                                <div style="background-color:#f8f9fa; border-radius:5px; padding:15px; 
+                                border-left:4px solid #0068C9; margin-top:10px;">
+                                    {answer}
+                                </div>
+                                """, unsafe_allow_html=True)
+                        else:
+                            st.warning("Please enter a question first.")
 else:
     # Show instructions when no documents are uploaded
     st.info("Please upload documents using the sidebar to get started.")
@@ -341,10 +479,13 @@ else:
         2. **Process Documents** - Click 'Process Documents' to extract and index content
         3. **Search** - Enter keywords in the search bar to find relevant content
         4. **View Results** - Browse through search results with highlighted matches
+        5. **Ask Questions** - Use the Q&A feature to ask questions about your documents
         
         ### Supported Features
         - Multiple document formats (PDF, DOCX, TXT)
-        - Full-text search capabilities
+        - Full-text search capabilities with relevance-based ranking
         - Document preview and metadata extraction
-        - Relevance-based result ranking
+        - AI-powered document analysis and summarization
+        - Natural language Q&A on document content
+        - Cross-document insights and theme identification
         """)
